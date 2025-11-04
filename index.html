@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Lookbook Panorama</title>
+<style>
+  :root{--overlay-width:15vw}
+  html,body{height:100%;margin:0;font-family:Arial,system-ui;background:#111;color:#fff;overflow:hidden}
+  .stage{height:100vh;display:flex;flex-direction:column}
+  .viewer{position:relative;flex:1;overflow:hidden}
+  .strip{height:100%;white-space:nowrap;display:flex;align-items:center}
+  .strip img{height:100%;display:inline-block;user-select:none;pointer-events:none}
+
+  /* Боковые области прокрутки */
+  .side{
+    position:fixed;top:0;bottom:48px;width:var(--overlay-width);
+    cursor:pointer;z-index:10;display:flex;align-items:center;justify-content:center;
+  }
+  .side.left{left:0}
+  .side.right{right:0}
+  .side::after{
+    content:'';position:absolute;inset:0;
+    background:linear-gradient(90deg,rgba(0,0,0,0.15),transparent);
+    pointer-events:none;
+  }
+  .side.right::after{
+    background:linear-gradient(270deg,rgba(0,0,0,0.15),transparent);
+  }
+  .side svg{
+    width:28px;height:28px;fill:rgba(255,255,255,0.6);transition:fill 0.2s;
+  }
+  .side:hover svg{fill:rgba(255,255,255,0.85)}
+
+  /* Подсказка */
+  .hint{
+    position:fixed;
+    bottom:52px;
+    left:50%;
+    transform:translateX(-50%);
+    background:rgba(0,0,0,0.35);
+    padding:4px 10px;
+    border-radius:4px;
+    font-size:11px;
+    opacity:0.8;
+    text-align:center;
+  }
+
+  /* Панель управления */
+  .controls{
+    height:36px;
+    display:flex;
+    align-items:center;
+    padding:4px 8px;
+    gap:8px;
+    background:linear-gradient(to top, rgba(0,0,0,0.4), transparent);
+    position:fixed;
+    bottom:0;
+    left:0;
+    right:0;
+    z-index:15;
+  }
+
+  /* Ползунок */
+  input[type=range]{
+    flex:1;
+    height:4px;
+    background:#1c1c1c;
+    border-radius:4px;
+    outline:none;
+    -webkit-appearance:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;
+    width:14px;
+    height:14px;
+    border-radius:50%;
+    background:#000;
+    cursor:pointer;
+  }
+  input[type=range]::-moz-range-thumb{
+    width:14px;
+    height:14px;
+    border-radius:50%;
+    background:#000;
+    cursor:pointer;
+  }
+
+  .btn{
+    padding:4px 8px;
+    border-radius:6px;
+    background:#222;
+    color:#fff;
+    border:1px solid rgba(255,255,255,0.06);
+    font-size:11px;
+    cursor:pointer;
+  }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="viewer" id="viewer">
+      <div class="strip" id="strip">
+        <img id="longimg" src="q1.jpg" alt="lookbook" />
+      </div>
+      <div class="side left" id="left">
+        <svg viewBox="0 0 24 24"><polygon points="15,6 9,12 15,18" /></svg>
+      </div>
+      <div class="side right" id="right">
+        <svg viewBox="0 0 24 24"><polygon points="9,6 15,12 9,18" /></svg>
+      </div>
+      <div class="hint">Нажми на стороны или тяни ползунок</div>
+    </div>
+
+    <div class="controls">
+      <button class="btn" id="fitBtn">Подогнать</button>
+      <input id="slider" type="range" min="0" max="100" value="0" aria-label="Позиция">
+      <span id="percent" style="min-width:36px;text-align:left;font-size:11px;">0%</span>
+    </div>
+  </div>
+
+<script>
+(function(){
+  const viewer = document.getElementById('viewer');
+  const img = document.getElementById('longimg');
+  const left = document.getElementById('left');
+  const right = document.getElementById('right');
+  const slider = document.getElementById('slider');
+  const percent = document.getElementById('percent');
+  const fitBtn = document.getElementById('fitBtn');
+  const strip = document.getElementById('strip');
+
+  let isScrolling=false, scrollDir=0, velocity=0, rafId=null;
+  const accel=0.02, maxSpeed=3.0, friction=0.93;
+
+  function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+  function updateSliderFromScroll(){
+    const max = viewer.scrollWidth - viewer.clientWidth;
+    const pct = max>0?Math.round((viewer.scrollLeft/max)*100):0;
+    slider.value = pct; percent.textContent = pct + '%';
+  }
+  function step(){
+    if(isScrolling){
+      velocity += accel*scrollDir;
+      velocity = clamp(velocity,-maxSpeed,maxSpeed);
+    } else {
+      velocity *= friction;
+      if(Math.abs(velocity)<0.01){
+        velocity=0; cancelAnimationFrame(rafId); rafId=null; return;
+      }
+    }
+    const maxScroll = viewer.scrollWidth - viewer.clientWidth;
+    viewer.scrollLeft = clamp(viewer.scrollLeft + velocity*16, 0, maxScroll);
+    updateSliderFromScroll();
+    rafId = requestAnimationFrame(step);
+  }
+  function startScroll(dir){ scrollDir=dir; isScrolling=true; if(!rafId) rafId=requestAnimationFrame(step); }
+  function stopScroll(){ isScrolling=false; }
+
+  left.addEventListener('pointerdown', e=>{ e.preventDefault(); startScroll(-1); });
+  right.addEventListener('pointerdown', e=>{ e.preventDefault(); startScroll(1); });
+  document.addEventListener('pointerup', stopScroll);
+  document.addEventListener('pointercancel', stopScroll);
+
+  slider.addEventListener('input', ()=>{
+    const pct = Number(slider.value)/100;
+    const max = viewer.scrollWidth - viewer.clientWidth;
+    viewer.scrollLeft = Math.round(max*pct);
+    percent.textContent = Math.round(pct*100)+'%';
+  });
+
+  fitBtn.addEventListener('click', ()=>{
+    img.style.height='100%';
+    img.style.width='auto';
+    viewer.scrollLeft = 0;
+    updateSliderFromScroll();
+  });
+
+  img.addEventListener('load', ()=>{
+    strip.style.minWidth = img.naturalWidth + 'px';
+    viewer.scrollLeft = 0;
+    updateSliderFromScroll();
+  });
+
+  viewer.addEventListener('scroll', ()=>{ requestAnimationFrame(updateSliderFromScroll); }, {passive:true});
+})();
+</script>
+</body>
+</html>
